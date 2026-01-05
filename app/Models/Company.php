@@ -117,4 +117,12 @@ class Company extends Model
     {
         return $query->whereIn('subscription_status', ['active', 'trial']);
     }
+
+    /**
+     * Get all skill metric files for this company.
+     */
+    public function skillMetricFiles(): HasMany
+    {
+        return $this->hasMany(SkillMetricFile::class);
+    }
 }
