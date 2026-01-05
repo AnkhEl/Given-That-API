@@ -230,4 +230,33 @@ class Course extends Model
         return $query->where('title', 'ILIKE', "%{$search}%")
             ->orWhere('description', 'ILIKE', "%{$search}%");
     }
+
+
+    /**
+     * Get all certificates issued for this course.
+     */
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class);
+    }
+
+    /**
+     * Get active enrollments count.
+     */
+    public function getActiveEnrollmentsCountAttribute(): int
+    {
+        return $this->enrollments()->active()->count();
+    }
+
+    /**
+     * Get completion rate percentage.
+     */
+    public function getCompletionRateAttribute(): float
+    {
+        $total = $this->enrollments()->count();
+        if ($total === 0) return 0;
+
+        $completed = $this->enrollments()->completed()->count();
+        return round(($completed / $total) * 100, 2);
+    }
 }

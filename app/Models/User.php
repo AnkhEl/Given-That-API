@@ -149,4 +149,44 @@ class User extends Authenticatable
     {
         return $this->hasMany(AssessmentAttempt::class);
     }
+
+    /**
+     * Get all enrollments for this user.
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    /**
+     * Get all progress records for this user.
+     */
+    public function progress(): HasMany
+    {
+        return $this->hasMany(UserProgress::class);
+    }
+
+    /**
+     * Get all certificates for this user.
+     */
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class);
+    }
+
+    /**
+     * Get all notifications for this user.
+     */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class)->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Get unread notifications count.
+     */
+    public function getUnreadNotificationsCountAttribute(): int
+    {
+        return $this->notifications()->unread()->count();
+    }
 }

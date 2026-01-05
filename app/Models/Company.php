@@ -125,4 +125,35 @@ class Company extends Model
     {
         return $this->hasMany(SkillMetricFile::class);
     }
+
+    /**
+     * Get all enrollments for this company.
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    /**
+     * Get active enrollments.
+     */
+    public function activeEnrollments(): HasMany
+    {
+        return $this->enrollments()->active();
+    }
+
+    /**
+     * Get total learning hours.
+     */
+    public function getTotalLearningHoursAttribute(): float
+    {
+        $totalSeconds = $this->enrollments()
+            ->with('progress')
+            ->get()
+            ->sum(function ($enrollment) {
+                return $enrollment->total_time_spent;
+            });
+
+        return round($totalSeconds / 3600, 2); // Convert to hours
+    }
 }
