@@ -133,4 +133,20 @@ class User extends Authenticatable
     {
         return $this->hasMany(SkillMetricFile::class, 'uploaded_by');
     }
+
+    /**
+     * Get courses curated by this user.
+     */
+    public function curatedCourses(): HasMany
+    {
+        return $this->hasMany(Course::class, 'curated_by');
+    }
+
+    /**
+     * Get assessment attempts by this user.
+     */
+    public function assessmentAttempts(): HasMany
+    {
+        return $this->hasMany(AssessmentAttempt::class);
+    }
 }
