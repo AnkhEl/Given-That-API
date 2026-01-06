@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CourseController;
+use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\SkillController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -54,8 +56,39 @@ Route::prefix('v1')->group(function () {
             });
         });
 
+        // Courses routes
+        Route::prefix('courses')->group(function () {
+            // Public (authenticated users can view published courses)
+            Route::get('/', [CourseController::class, 'index']);
+            Route::get('/by-skill-transition', [CourseController::class, 'bySkillTransition']);
+            Route::get('/{course}', [CourseController::class, 'show']);
+            Route::get('/{course}/statistics', [CourseController::class, 'statistics']);
+
+            // Curator and Admin only
+            Route::middleware('role:super_admin,curator')->group(function () {
+                Route::post('/', [CourseController::class, 'store']);
+                Route::put('/{course}', [CourseController::class, 'update']);
+                Route::patch('/{course}', [CourseController::class, 'update']);
+                Route::delete('/{course}', [CourseController::class, 'destroy']);
+                Route::post('/{course}/publish', [CourseController::class, 'publish']);
+                Route::post('/{course}/archive', [CourseController::class, 'archive']);
+
+                // Course Modules
+                Route::prefix('{course}/modules')->group(function () {
+                    Route::get('/', [CourseModuleController::class, 'index']);
+                    Route::post('/', [CourseModuleController::class, 'store']);
+                    Route::get('/{module}', [CourseModuleController::class, 'show']);
+                    Route::put('/{module}', [CourseModuleController::class, 'update']);
+                    Route::patch('/{module}', [CourseModuleController::class, 'update']);
+                    Route::delete('/{module}', [CourseModuleController::class, 'destroy']);
+                    Route::post('/{module}/publish', [CourseModuleController::class, 'publish']);
+                    Route::post('/{module}/unpublish', [CourseModuleController::class, 'unpublish']);
+                    Route::post('/reorder', [CourseModuleController::class, 'reorder']);
+                });
+            });
+        });
+
         // TODO: Add more API endpoints here
-        // - Courses
         // - Enrollments
         // - Progress
         // - Certificates
