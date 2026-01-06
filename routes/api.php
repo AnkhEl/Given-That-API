@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\SkillController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -35,8 +36,25 @@ Route::prefix('v1')->group(function () {
             Route::get('/me', [AuthController::class, 'me']);
         });
 
+        // Skills routes
+        Route::prefix('skills')->group(function () {
+            // Public (authenticated users can view)
+            Route::get('/', [SkillController::class, 'index']);
+            Route::get('/categories', [SkillController::class, 'categories']);
+            Route::get('/popular', [SkillController::class, 'popular']);
+            Route::get('/{skill}', [SkillController::class, 'show']);
+
+            // Admin only (super_admin can manage)
+            Route::middleware('role:super_admin')->group(function () {
+                Route::post('/', [SkillController::class, 'store']);
+                Route::put('/{skill}', [SkillController::class, 'update']);
+                Route::patch('/{skill}', [SkillController::class, 'update']);
+                Route::delete('/{skill}', [SkillController::class, 'destroy']);
+                Route::post('/{skill}/increment-popularity', [SkillController::class, 'incrementPopularity']);
+            });
+        });
+
         // TODO: Add more API endpoints here
-        // - Skills
         // - Courses
         // - Enrollments
         // - Progress
