@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
+use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\SkillController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -88,9 +89,29 @@ Route::prefix('v1')->group(function () {
             });
         });
 
+        // Enrollments routes
+        Route::prefix('enrollments')->group(function () {
+            // List enrollments (filtered by role)
+            Route::get('/', [EnrollmentController::class, 'index']);
+            Route::get('/my', [EnrollmentController::class, 'myEnrollments']);
+            Route::get('/{enrollment}', [EnrollmentController::class, 'show']);
+            Route::get('/{enrollment}/progress', [EnrollmentController::class, 'progress']);
+
+            // Enroll in course
+            Route::post('/', [EnrollmentController::class, 'store']);
+
+            // Update enrollment (e.g., drop course)
+            Route::put('/{enrollment}', [EnrollmentController::class, 'update']);
+            Route::patch('/{enrollment}', [EnrollmentController::class, 'update']);
+
+            // Progress tracking
+            Route::post('/{enrollment}/modules/{module}/start', [EnrollmentController::class, 'startModule']);
+            Route::post('/{enrollment}/modules/{module}/complete', [EnrollmentController::class, 'completeModule']);
+            Route::post('/{enrollment}/modules/{module}/progress', [EnrollmentController::class, 'updateProgress']);
+        });
+
         // TODO: Add more API endpoints here
-        // - Enrollments
-        // - Progress
+        // - Assessments
         // - Certificates
         // - Notifications
     });
