@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CertificateController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\EnrollmentController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\SkillController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -154,8 +155,27 @@ Route::prefix('v1')->group(function () {
             });
         });
 
+        // Notifications routes
+        Route::prefix('notifications')->group(function () {
+            // Get notifications
+            Route::get('/', [NotificationController::class, 'index']);
+            Route::get('/unread', [NotificationController::class, 'unread']);
+            Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+            Route::get('/statistics', [NotificationController::class, 'statistics']);
+            Route::get('/{notification}', [NotificationController::class, 'show']);
+
+            // Mark as read/unread
+            Route::post('/{notification}/mark-read', [NotificationController::class, 'markAsRead']);
+            Route::post('/{notification}/mark-unread', [NotificationController::class, 'markAsUnread']);
+            Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+
+            // Delete notifications
+            Route::delete('/{notification}', [NotificationController::class, 'destroy']);
+            Route::delete('/read/all', [NotificationController::class, 'deleteRead']);
+            Route::delete('/all/clear', [NotificationController::class, 'deleteAll']);
+        });
+
         // TODO: Add more API endpoints here
-        // - Notifications
         // - Skill Metric File Upload
         // - Admin Analytics
     });

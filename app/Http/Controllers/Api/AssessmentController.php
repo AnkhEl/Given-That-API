@@ -11,6 +11,7 @@ use App\Http\Resources\AssessmentResource;
 use App\Models\Assessment;
 use App\Models\AssessmentAttempt;
 use App\Models\Enrollment;
+use App\Services\NotificationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -164,8 +165,18 @@ class AssessmentController extends Controller
         // Calculate score
         $attempt->calculateScore();
 
+        // Refresh to get updated values
+        $attempt->fresh();
+
+        // Send notification based on pass/fail
+        if ($attempt->passed) {
+            NotificationService::assessmentPassed($user, $assessment, $attempt);
+        } else {
+            NotificationService::assessmentFailed($user, $assessment, $attempt);
+        }
+
         return $this->createdResponse([
-            'attempt' => new AssessmentAttemptResource($attempt->fresh()),
+            'attempt' => new AssessmentAttemptResource($attempt),
             'remaining_attempts' => $assessment->getRemainingAttempts($user->id),
         ], 'Assessment submitted successfully');
     }

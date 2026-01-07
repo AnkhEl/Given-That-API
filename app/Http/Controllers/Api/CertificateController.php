@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CertificateResource;
 use App\Models\Certificate;
 use App\Models\Enrollment;
+use App\Services\NotificationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -109,6 +110,9 @@ class CertificateController extends Controller
             'certificate_issued_at' => now(),
             'certificate_url' => $certificate->certificate_url,
         ]);
+
+        // Send notification about certificate issuance
+        NotificationService::certificateIssued($enrollment->user, $certificate);
 
         return $this->createdResponse(
             new CertificateResource($certificate),

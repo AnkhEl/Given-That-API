@@ -8,6 +8,7 @@ use App\Models\Course;
 use App\Models\Enrollment;
 use App\Models\User;
 use App\Models\UserProgress;
+use App\Services\NotificationService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -119,6 +120,14 @@ class EnrollmentController extends Controller
             }
 
             $enrollments[] = $enrollment;
+
+            // Send notifications
+            NotificationService::courseEnrolled($targetUser, $course);
+
+            // If enrolled by admin (not self-enrollment), mention who assigned it
+            if ($user->id !== $userId) {
+                NotificationService::courseAssigned($targetUser, $course, $user);
+            }
         }
 
         if (empty($enrollments) && !empty($errors)) {
@@ -305,14 +314,14 @@ class EnrollmentController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $enrollment = Enrollment::findOrFail($enrollmentId);
+        $enrollment = Enrollment::with(['course'])->findOrFail($enrollmentId);
 
         // Authorization check
         if ($request->user()->id != $enrollment->user_id) {
             return $this->forbiddenResponse();
         }
 
-        $progress = UserProgress::where('enrollment_id', $enrollmentId)
+        $progress = UserProgress::with('module')->where('enrollment_id', $enrollmentId)
             ->where('module_id', $moduleId)
             ->firstOrFail();
 
@@ -327,8 +336,23 @@ class EnrollmentController extends Controller
         // Mark as completed
         $progress->markAsCompleted();
 
+        // 🔔 Send notification for module completion
+        NotificationService::moduleCompleted(
+            $request->user(),
+            $progress->module,
+            $enrollment->course
+        );
+
         // Get updated enrollment
         $enrollment->fresh();
+
+        // 🔔 Check if this was the last module (course completed)
+        if ($enrollment->status === 'completed') {
+            NotificationService::courseCompleted(
+                $request->user(),
+                $enrollment->course
+            );
+        }
 
         return $this->successResponse([
             'progress' => [
