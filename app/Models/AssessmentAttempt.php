@@ -94,7 +94,9 @@ class AssessmentAttempt extends Model
     }
 
     /**
-     * Get time taken in human-readable format.
+     * Get human-readable time taken.
+     *
+     * @return string
      */
     public function getTimeTakenHumanAttribute(): string
     {
@@ -102,71 +104,119 @@ class AssessmentAttempt extends Model
             return 'N/A';
         }
 
-        $hours = floor($this->time_taken_seconds / 3600);
-        $minutes = floor(($this->time_taken_seconds % 3600) / 60);
-        $seconds = $this->time_taken_seconds % 60;
+        $seconds = $this->time_taken_seconds;
+        $hours = floor($seconds / 3600);
+        $minutes = floor(($seconds % 3600) / 60);
+        $secs = $seconds % 60;
 
         if ($hours > 0) {
-            return sprintf('%dh %dm %ds', $hours, $minutes, $seconds);
+            return sprintf('%dh %dm %ds', $hours, $minutes, $secs);
         } elseif ($minutes > 0) {
-            return sprintf('%dm %ds', $minutes, $seconds);
+            return sprintf('%dm %ds', $minutes, $secs);
         } else {
-            return sprintf('%ds', $seconds);
+            return sprintf('%ds', $secs);
         }
     }
 
     /**
-     * Get score percentage.
+     * Get the score as a percentage.
+     * This accessor ensures consistency with the calculated pass/fail decision.
      */
     public function getScorePercentageAttribute(): float
     {
-        return $this->score ?? 0.0;
+        $totalPoints = $this->assessment->total_points;
+        if ($totalPoints == 0) return 0;
+
+        return round(($this->score / $totalPoints) * 100, 2);
     }
 
     /**
-     * Calculate and set score from answers.
+     * Calculate the score for this assessment attempt.
+     * Handles multiple question types with appropriate scoring logic.
+     * Rounds scores before determining pass/fail to avoid floating-point precision issues.
      */
     public function calculateScore(): void
     {
         $assessment = $this->assessment;
-        $questions = $assessment->questions ?? [];
-        $answers = $this->answers ?? [];
+        $questions = $assessment->questions;
+        $userAnswers = $this->answers;
 
-        $totalPoints = 0;
-        $earnedPoints = 0;
+        $totalScore = 0;
         $feedback = [];
 
         foreach ($questions as $question) {
             $questionId = $question['id'];
-            $points = $question['points'] ?? 0;
-            $totalPoints += $points;
+            $userAnswer = $userAnswers[$questionId] ?? null;
+            $correctAnswer = $question['correct_answer'];
+            $points = $question['points'];
 
-            $userAnswer = $answers[$questionId] ?? null;
-            $correctAnswer = $question['correct_answer'] ?? null;
+            $pointsEarned = 0;
+            $isCorrect = false;
 
-            $isCorrect = $this->checkAnswer($userAnswer, $correctAnswer, $question['type'] ?? 'multiple_choice');
+            // Score based on question type
+            if ($question['type'] === 'multiple_select') {
+                // Partial credit for multiple select questions
+                if (is_array($userAnswer) && is_array($correctAnswer)) {
+                    $correctCount = count(array_intersect($userAnswer, $correctAnswer));
+                    $wrongCount = count(array_diff($userAnswer, $correctAnswer));
+                    $totalCorrect = count($correctAnswer);
 
-            if ($isCorrect) {
-                $earnedPoints += $points;
+                    // Calculate partial credit with penalty for wrong selections
+                    // Formula: (correct_selections - wrong_selections) / total_correct * points
+                    // Minimum score is 0 (can't go negative)
+                    if ($correctCount > 0) {
+                        $pointsEarned = max(0, (($correctCount - $wrongCount) / $totalCorrect) * $points);
+                    }
+
+                    // Only mark as fully correct if all correct answers selected and no wrong ones
+                    $isCorrect = $correctCount === $totalCorrect && count($userAnswer) === $totalCorrect;
+                }
+            } else {
+                // Binary scoring for other question types (multiple_choice, true_false, coding_challenge)
+                if (is_array($correctAnswer)) {
+                    // Handle cases where correct answer could be one of multiple options
+                    $isCorrect = in_array($userAnswer, $correctAnswer);
+                } else {
+                    // Standard string comparison
+                    $isCorrect = $userAnswer === $correctAnswer;
+                }
+                $pointsEarned = $isCorrect ? $points : 0;
             }
 
+            $totalScore += $pointsEarned;
+
+            // Build feedback for this question
             $feedback[$questionId] = [
                 'correct' => $isCorrect,
-                'points_earned' => $isCorrect ? $points : 0,
+                'points_earned' => round($pointsEarned, 2),
+                'points_possible' => $points,
+                'user_answer' => $userAnswer,
                 'correct_answer' => $correctAnswer,
                 'explanation' => $question['explanation'] ?? null,
             ];
         }
 
-        $scorePercentage = $totalPoints > 0 ? ($earnedPoints / $totalPoints) * 100 : 0;
-        $passed = $scorePercentage >= $assessment->passing_score;
+        // Round score BEFORE calculating percentage
+        // This prevents floating-point precision issues where 69.9999% displays as 70% but fails
+        $totalScore = round($totalScore, 2);
 
+        // Calculate percentage based on rounded score
+        $totalPoints = $assessment->total_points;
+        $percentage = $totalPoints > 0 ? round(($totalScore / $totalPoints) * 100, 2) : 0;
+
+        // Determine pass/fail using rounded percentage
+        // Now if student has 69.995%, it rounds to 70.00% and passes (if passing score is 70%)
+        // This ensures UI display matches system decision
+        $passed = $percentage >= $assessment->passing_score;
+
+        // Update the attempt record
         $this->update([
-            'score' => round($scorePercentage, 2),
-            'passed' => $passed,
-            'feedback' => $feedback,
+            'score' => $totalScore,        // Rounded to 2 decimal places
+            'passed' => $passed,            // Based on rounded percentage
+            'feedback' => $feedback,        // Detailed per-question feedback
         ]);
     }
+
 
     /**
      * Check if an answer is correct.
