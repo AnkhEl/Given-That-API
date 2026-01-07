@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CertificateController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\EnrollmentController;
@@ -28,6 +29,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/login', [AuthController::class, 'login']);
     });
+
+    // Public certificate verification (no auth required)
+    Route::get('/certificates/verify/{certificateNumber}', [CertificateController::class, 'verify']);
 
     // Protected routes (require authentication)
     Route::middleware('auth:sanctum')->group(function () {
@@ -131,12 +135,29 @@ Route::prefix('v1')->group(function () {
             Route::post('/{enrollment}/modules/{module}/start', [EnrollmentController::class, 'startModule']);
             Route::post('/{enrollment}/modules/{module}/complete', [EnrollmentController::class, 'completeModule']);
             Route::post('/{enrollment}/modules/{module}/progress', [EnrollmentController::class, 'updateProgress']);
+
+            // Issue certificate for enrollment
+            Route::post('/{enrollment}/certificate/issue', [CertificateController::class, 'issue']);
+        });
+
+        // Certificates routes
+        Route::prefix('certificates')->group(function () {
+            // List certificates (role-filtered)
+            Route::get('/', [CertificateController::class, 'index']);
+            Route::get('/my', [CertificateController::class, 'myCertificates']);
+            Route::get('/{certificate}', [CertificateController::class, 'show']);
+            Route::get('/{certificate}/download', [CertificateController::class, 'download']);
+
+            // Admin only - revoke certificate
+            Route::middleware('role:super_admin,company_admin')->group(function () {
+                Route::delete('/{certificate}', [CertificateController::class, 'destroy']);
+            });
         });
 
         // TODO: Add more API endpoints here
-        // - Certificates
         // - Notifications
         // - Skill Metric File Upload
+        // - Admin Analytics
     });
 });
 
