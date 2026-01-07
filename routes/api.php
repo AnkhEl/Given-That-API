@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AssessmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
@@ -87,6 +88,28 @@ Route::prefix('v1')->group(function () {
                     Route::post('/reorder', [CourseModuleController::class, 'reorder']);
                 });
             });
+
+            // Assessments routes
+            Route::prefix('{course}/assessments')->group(function () {
+                // View assessments (all authenticated users)
+                Route::get('/', [AssessmentController::class, 'index']);
+                Route::get('/{assessment}', [AssessmentController::class, 'show']);
+
+                // Submit assessment (trainees)
+                Route::post('/{assessment}/submit', [AssessmentController::class, 'submit']);
+
+                // View attempts
+                Route::get('/{assessment}/attempts', [AssessmentController::class, 'attempts']);
+                Route::get('/{assessment}/attempts/{attempt}', [AssessmentController::class, 'showAttempt']);
+
+                // Manage assessments (curators and admins only)
+                Route::middleware('role:super_admin,curator')->group(function () {
+                    Route::post('/', [AssessmentController::class, 'store']);
+                    Route::put('/{assessment}', [AssessmentController::class, 'update']);
+                    Route::patch('/{assessment}', [AssessmentController::class, 'update']);
+                    Route::delete('/{assessment}', [AssessmentController::class, 'destroy']);
+                });
+            });
         });
 
         // Enrollments routes
@@ -111,9 +134,9 @@ Route::prefix('v1')->group(function () {
         });
 
         // TODO: Add more API endpoints here
-        // - Assessments
         // - Certificates
         // - Notifications
+        // - Skill Metric File Upload
     });
 });
 
