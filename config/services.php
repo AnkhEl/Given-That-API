@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    'ai' => [
+        'provider' => env('AI_PROVIDER', 'anthropic'), // 'anthropic' or 'openai'
+        'api_key' => env('AI_API_KEY'),
+
+        // Anthropic configuration
+        'anthropic_model' => env('AI_ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
+
+        // OpenAI configuration
+        'openai_model' => env('AI_OPENAI_MODEL', 'gpt-4-turbo-preview'),
+
+        // GPT4All configuration (local)
+        'gpt4all_url' => env('AI_GPT4ALL_URL', 'http://localhost:4891'),
+        'gpt4all_model' => env('AI_GPT4ALL_MODEL', 'mistral-7b-instruct-v0.2.Q4_0.gguf'),
+    ],
+
 ];

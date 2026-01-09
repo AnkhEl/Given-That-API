@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\SkillController;
+use App\Http\Controllers\Api\SkillMetricFileController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -175,8 +176,18 @@ Route::prefix('v1')->group(function () {
             Route::delete('/all/clear', [NotificationController::class, 'deleteAll']);
         });
 
+        // Skill Metric Files routes
+        Route::prefix('skill-metric-files')->middleware('role:super_admin,company_admin')->group(function () {
+            Route::post('/upload', [SkillMetricFileController::class, 'upload']);
+            Route::get('/', [SkillMetricFileController::class, 'index']);
+            Route::get('/statistics', [SkillMetricFileController::class, 'statistics']);
+            Route::get('/{file}', [SkillMetricFileController::class, 'show']);
+            Route::get('/{file}/download', [SkillMetricFileController::class, 'download']);
+            Route::post('/{file}/reprocess', [SkillMetricFileController::class, 'reprocess']);
+            Route::delete('/{file}', [SkillMetricFileController::class, 'destroy']);
+        });
+
         // TODO: Add more API endpoints here
-        // - Skill Metric File Upload
         // - Admin Analytics
     });
 });

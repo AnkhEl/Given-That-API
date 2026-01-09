@@ -191,8 +191,11 @@ class SkillMetricFile extends Model
         }
 
         $bytes = $this->file_size;
-        $units = ['B', 'KB', 'MB', 'GB'];
-        $factor = floor((strlen($bytes) - 1) / 3);
+        $units = ['B', 'KB', 'MB', 'GB', 'TB']; // Added TB for future-proofing
+
+        // FIX: strlen() doesn't work on integers, use log10 instead
+        $factor = $bytes > 0 ? floor(log($bytes, 1024)) : 0;
+        $factor = min($factor, count($units) - 1); // Don't exceed array bounds
 
         return sprintf("%.2f", $bytes / pow(1024, $factor)) . ' ' . $units[$factor];
     }

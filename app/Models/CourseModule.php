@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class CourseModule extends Model
 {
@@ -45,6 +46,15 @@ class CourseModule extends Model
         'order_index' => 'integer',
         'is_published' => 'boolean',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($module) {
+            if (empty($module->slug)) {
+                $module->slug = Str::slug($module->title);
+            }
+        });
+    }
 
     /**
      * Get the course that owns this module.
