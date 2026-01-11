@@ -7,6 +7,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * Status Flow:
+ *
+ * pending             → File uploaded, waiting to process
+ * processing          → Stage 1: Extracting skills (ExtractSkillsFromFile)
+ * skills_extracted    → Stage 1 complete, dispatched Stage 2
+ * generating_courses  → Stage 2: Generating courses (GenerateCoursesFromStrategy)
+ * courses_generated   → Stage 2 complete, dispatching Stage 3 per course
+ * completed           → All stages done, modules created
+ * failed              → Any stage failed permanently
+ * needs_review        → Strategy determined manual review needed
+ */
 class SkillMetricFile extends Model
 {
     use HasFactory;

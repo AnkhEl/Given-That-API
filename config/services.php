@@ -36,7 +36,7 @@ return [
     ],
 
     'ai' => [
-        'provider' => env('AI_PROVIDER', 'anthropic'), // 'anthropic' or 'openai'
+        'provider' => env('AI_PROVIDER', 'anthropic'), // 'anthropic' or 'openai or 'gpt4all'
         'api_key' => env('AI_API_KEY'),
 
         // Anthropic configuration
@@ -44,6 +44,11 @@ return [
 
         // OpenAI configuration
         'openai_model' => env('AI_OPENAI_MODEL', 'gpt-4-turbo-preview'),
+
+        //Ollama configuration
+        'ollama_url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
+        'ollama_model' => env('OLLAMA_MODEL', 'llama2'),
+
 
         // GPT4All configuration (local)
         'gpt4all_url' => env('AI_GPT4ALL_URL', 'http://localhost:4891'),

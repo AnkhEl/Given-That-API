@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SkillMetricFile\UploadSkillMetricFileRequest;
 use App\Http\Resources\SkillMetricFileResource;
+use App\Jobs\ExtractSkillsFromFile;
 use App\Jobs\ProcessSkillMetricFile;
 use App\Models\SkillMetricFile;
 use App\Services\NotificationService;
@@ -87,7 +88,7 @@ class SkillMetricFileController extends Controller
         ]);
 
         // Dispatch background job for processing
-        ProcessSkillMetricFile::dispatch($skillMetricFile);
+        ExtractSkillsFromFile::dispatch($skillMetricFile);
 
         return $this->createdResponse(
             new SkillMetricFileResource($skillMetricFile),
@@ -149,7 +150,7 @@ class SkillMetricFileController extends Controller
         ]);
 
         // Dispatch job again
-        ProcessSkillMetricFile::dispatch($file);
+        ExtractSkillsFromFile::dispatch($file);
 
         return $this->successResponse(
             new SkillMetricFileResource($file->fresh()),

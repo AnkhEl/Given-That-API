@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Cloudstudio\Ollama\Facades\Ollama;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -23,6 +24,12 @@ class AIService
         } elseif ($this->provider === 'openai') {
             $this->model = config('services.ai.openai_model', 'gpt-4-turbo-preview');
             $this->baseUrl = 'https://api.openai.com/v1';
+        }
+        elseif ($this->provider === 'ollama') {
+            // Ollama - Local
+            $this->model = config('services.ai.ollama_model', 'llama3-custom');
+            $this->baseUrl = config('services.ai.ollama_url', 'http://host.docker.internal:11434');
+            $this->apiKey = 'not-needed';  // Ollama doesn't require API key by default
         } else {
             // GPT4All - Local
             $this->model = config('services.ai.gpt4all_model', 'mistral-7b-instruct-v0.2.Q4_0.gguf');
@@ -36,6 +43,16 @@ class AIService
      */
     public function isAvailable(): bool
     {
+        if ($this->provider === 'ollama') {
+            try {
+                $response = Http::timeout(5)->get("{$this->baseUrl}/api/tags");
+                return $response->successful();
+            } catch (\Exception $e) {
+                Log::warning('Ollama server not available', ['error' => $e->getMessage()]);
+                return false;
+            }
+        }
+
         if ($this->provider === 'gpt4all') {
             // Check if GPT4All server is running
             try {
@@ -112,6 +129,7 @@ class AIService
         return match($this->provider) {
             'anthropic' => $this->callAnthropic($prompt, $maxTokens),
             'openai' => $this->callOpenAI($prompt, $maxTokens),
+            'ollama' => $this->callOllama($prompt, $maxTokens),
             'gpt4all' => $this->callGPT4All($prompt, $maxTokens),
             default => throw new \Exception("Unknown AI provider: {$this->provider}"),
         };
@@ -207,6 +225,24 @@ class AIService
         }
     }
 
+    protected function callOllama(string $prompt, int $maxTokens): string
+    {
+        try {
+            // Use Ollama package's fluent interface
+            $response = Ollama::model($this->model)
+                ->prompt($prompt)
+                ->options([
+                    'temperature' => 0.7,
+                    'num_predict' => $maxTokens,
+                ])
+                ->ask();
+
+            return $response['response'];
+
+        } catch (\Exception $e) {
+            throw new \Exception('Cannot connect to Ollama. Make sure Ollama service is running: ' . $e->getMessage());
+        }
+    }
     /**
      * Build skill extraction prompt.
      */

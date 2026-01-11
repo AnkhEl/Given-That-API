@@ -54,17 +54,37 @@ class Course extends Model
     /**
      * Boot the model.
      */
-    protected static function boot()
+    protected static function booted()
     {
-        parent::boot();
-
-        // Auto-generate slug from title if not provided
         static::creating(function ($course) {
             if (empty($course->slug)) {
-                $course->slug = Str::slug($course->title);
+                $course->slug = static::generateUniqueSlug($course->title);
             }
         });
     }
+
+    /**
+     * Generate a unique slug for the course
+     * TODO: Consider implementing course reuse logic via many-to-many relationship
+     * Currently creates duplicate courses with -1, -2 suffixes
+     * Long-term: Share courses across multiple skill_metric_files
+     */
+    protected static function generateUniqueSlug(string $title): string
+    {
+        $slug = Str::slug($title);
+        $originalSlug = $slug;
+        $count = 1;
+
+        // Check if slug exists, add suffix if needed
+        while (static::where('slug', $slug)->exists()) {
+            $slug = $originalSlug . '-' . $count;
+            $count++;
+        }
+
+        return $slug;
+    }
+
+
 
     /**
      * Get the skill metric file that generated this course.
