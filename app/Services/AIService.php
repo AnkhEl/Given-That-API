@@ -231,6 +231,7 @@ class AIService
             // Use Ollama package's fluent interface
             $response = Ollama::model($this->model)
                 ->prompt($prompt)
+                ->format('json')
                 ->options([
                     'temperature' => 0.7,
                     'num_predict' => $maxTokens,
