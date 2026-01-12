@@ -11,13 +11,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class CreateCourseModules implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $tries = 3;
-    public $timeout = 120; // 2 minutes
+    public $timeout = 300; // Increased from 120 to 5 minutes
     public $backoff = [30, 60];
 
     public function __construct(
@@ -32,6 +33,20 @@ class CreateCourseModules implements ShouldQueue
                 'course_title' => $this->course->title,
             ]);
 
+            // Check if modules already exist (idempotency check)
+            $existingModulesCount = $this->course->modules()->count();
+
+            if ($existingModulesCount > 0) {
+                Log::info('Modules already exist for this course, skipping creation', [
+                    'course_id' => $this->course->id,
+                    'existing_modules_count' => $existingModulesCount,
+                ]);
+
+                // Still proceed to completion check
+                $this->checkAndMarkCompletion();
+                return;
+            }
+
             $outline = $this->course->ai_generated_outline;
 
             if (!isset($outline['modules']) || !is_array($outline['modules'])) {
@@ -42,9 +57,17 @@ class CreateCourseModules implements ShouldQueue
 
             // Create modules from AI outline
             foreach ($outline['modules'] as $moduleData) {
+                // Generate unique slug with fallback
+                $baseSlug = isset($moduleData['title'])
+                    ? Str::slug($moduleData['title'])
+                    : 'module-' . ($moduleData['order_index'] ?? $modulesCreated + 1);
+
+                $slug = $this->generateUniqueSlug($this->course->id, $baseSlug);
+
                 CourseModule::create([
                     'course_id' => $this->course->id,
                     'title' => $moduleData['title'],
+                    'slug' => $slug, // Use unique slug
                     'description' => $moduleData['description'] ?? null,
                     'order_index' => $moduleData['order_index'],
                     'content_type' => 'text',
@@ -61,44 +84,8 @@ class CreateCourseModules implements ShouldQueue
                 'modules_created' => $modulesCreated,
             ]);
 
-            // Check if this is the last course for this file
-            $file = $this->course->skillMetricFile;
-            $totalCourses = $file->courses()->count();
-            $completedCourses = $file->courses()
-                ->whereHas('modules')
-                ->count();
-
-            Log::info('Course completion check', [
-                'file_id' => $file->id,
-                'total_courses' => $totalCourses,
-                'completed_courses' => $completedCourses,
-            ]);
-
-            // If all courses have modules, mark file as complete
-            if ($totalCourses === $completedCourses) {
-                $file->update([
-                    'status' => 'completed',
-                    'processed_at' => now(),
-                ]);
-
-                Log::info('All courses complete - file processing finished', [
-                    'file_id' => $file->id,
-                ]);
-
-                // Send notification
-                if ($file->uploader) {
-                    NotificationService::custom(
-                        $file->uploader,
-                        'Skill Metric File Processed',
-                        "Your file \"{$file->original_filename}\" has been processed successfully. {$totalCourses} course(s) generated.",
-                        "/skill-metric-files/{$file->id}",
-                        [
-                            'file_id' => $file->id,
-                            'courses_generated' => $totalCourses,
-                        ]
-                    );
-                }
-            }
+            // Check completion
+            $this->checkAndMarkCompletion();
 
         } catch (\Exception $e) {
             Log::error('Stage 3 failed: Module creation', [
@@ -108,6 +95,79 @@ class CreateCourseModules implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     *  Extract completion check to reusable method
+     */
+    protected function checkAndMarkCompletion(): void
+    {
+        // Check if this is the last course for this file
+        $file = $this->course->skillMetricFile;
+
+        if (!$file) {
+            Log::warning('Course has no associated skill metric file', [
+                'course_id' => $this->course->id,
+            ]);
+            return;
+        }
+
+        $totalCourses = $file->courses()->count();
+        $completedCourses = $file->courses()
+            ->whereHas('modules')
+            ->count();
+
+        Log::info('Course completion check', [
+            'file_id' => $file->id,
+            'total_courses' => $totalCourses,
+            'completed_courses' => $completedCourses,
+        ]);
+
+        // If all courses have modules, mark file as complete
+        if ($totalCourses === $completedCourses) {
+            $file->update([
+                'status' => 'completed',
+                'processed_at' => now(),
+            ]);
+
+            Log::info('All courses complete - file processing finished', [
+                'file_id' => $file->id,
+            ]);
+
+            // Send notification
+            if ($file->uploader) {
+                NotificationService::custom(
+                    $file->uploader,
+                    'Skill Metric File Processed',
+                    "Your file \"{$file->original_filename}\" has been processed successfully. {$totalCourses} course(s) generated.",
+                    "/skill-metric-files/{$file->id}",
+                    [
+                        'file_id' => $file->id,
+                        'courses_generated' => $totalCourses,
+                    ]
+                );
+            }
+        }
+    }
+
+    /**
+     *  Generate unique slug for module
+     */
+    protected function generateUniqueSlug(int $courseId, string $baseSlug): string
+    {
+        $slug = $baseSlug;
+        $counter = 1;
+
+        // Check if slug exists for this course
+        while (CourseModule::where('course_id', $courseId)
+            ->where('slug', $slug)
+            ->exists()) {
+
+            $slug = "{$baseSlug}-{$counter}";
+            $counter++;
+        }
+
+        return $slug;
     }
 
     public function failed(\Throwable $exception): void
