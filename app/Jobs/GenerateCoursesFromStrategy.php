@@ -34,7 +34,7 @@ class GenerateCoursesFromStrategy implements ShouldQueue
                 'file_id' => $this->skillMetricFile->id,
             ]);
 
-            // 🔥 FIX #1: Check if courses already exist (idempotency)
+            // Check if courses already exist (idempotency)
             $existingCoursesCount = $this->skillMetricFile->courses()->count();
 
             if ($existingCoursesCount > 0) {
@@ -51,7 +51,7 @@ class GenerateCoursesFromStrategy implements ShouldQueue
                 // Dispatch module creation jobs if not done yet
                 $this->ensureModuleJobsDispatched();
 
-                return; // ✅ Job completes successfully
+                return; // Job completes successfully
             }
 
             $this->skillMetricFile->update(['status' => 'generating_courses']);
@@ -100,12 +100,13 @@ class GenerateCoursesFromStrategy implements ShouldQueue
                         'error_message' => $strategyResult['reason'],
                         'processed_at' => now(),
                     ]);
-                    return; // ✅ Job completes (not a failure)
+                    return; // Job completes (not a failure)
                 }
             }
 
             // Step 3: Generate courses based on strategy
             $coursesGenerated = 0;
+            $generatedCourses = []; // 🔥 Collect courses first
 
             foreach ($strategyResult['courses'] as $courseSpec) {
                 try {
@@ -113,9 +114,7 @@ class GenerateCoursesFromStrategy implements ShouldQueue
 
                     if ($course) {
                         $coursesGenerated++;
-
-                        // Dispatch module creation job
-                        CreateCourseModules::dispatch($course);
+                        $generatedCourses[] = $course; // 🔥 Store for later
                     }
 
                 } catch (\Exception $e) {
@@ -126,6 +125,16 @@ class GenerateCoursesFromStrategy implements ShouldQueue
                     ]);
                     // Continue with other courses
                 }
+            }
+
+            // Dispatch module jobs AFTER all courses are generated
+            foreach ($generatedCourses as $course) {
+                CreateCourseModules::dispatch($course);
+
+                Log::info('Dispatched module creation job', [
+                    'course_id' => $course->id,
+                    'course_title' => $course->title,
+                ]);
             }
 
             if ($coursesGenerated === 0) {
@@ -159,7 +168,7 @@ class GenerateCoursesFromStrategy implements ShouldQueue
     }
 
     /**
-     * Ensure module creation jobs are dispatched for all courses
+     * 🔥 FIX #3: Ensure module creation jobs are dispatched for all courses
      */
     protected function ensureModuleJobsDispatched(): void
     {
