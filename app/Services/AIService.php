@@ -122,6 +122,31 @@ class AIService
     }
 
     /**
+     * Generate detailed module content.
+     */
+    public function generateModuleContent(array $context): array
+    {
+        if (!$this->isAvailable()) {
+            Log::warning('AI service not available for module content generation');
+            return $this->getFallbackModuleContent($context);
+        }
+
+        $prompt = $this->buildModuleContentPrompt($context);
+
+        try {
+            $response = $this->callAI($prompt);
+            return $this->parseModuleContent($response);
+        } catch (\Exception $e) {
+            Log::error('AI module content generation failed', [
+                'provider' => $this->provider,
+                'error' => $e->getMessage(),
+            ]);
+            // Return fallback instead of failing
+            return $this->getFallbackModuleContent($context);
+        }
+    }
+
+    /**
      * Call AI API.
      */
     protected function callAI(string $prompt, int $maxTokens = 4096): string
@@ -244,6 +269,7 @@ class AIService
             throw new \Exception('Cannot connect to Ollama. Make sure Ollama service is running: ' . $e->getMessage());
         }
     }
+
     /**
      * Build skill extraction prompt.
      */
@@ -335,6 +361,155 @@ IMPORTANT: Respond ONLY with valid JSON. No markdown, no explanations:
 
 JSON Response:
 PROMPT;
+    }
+
+    /**
+     * Build module content generation prompt.
+     */
+    protected function buildModuleContentPrompt(array $context): string
+    {
+        $sourceSkill = $context['source_skill'];
+        $targetSkill = $context['target_skill'];
+        $moduleTitle = $context['module_title'];
+        $moduleDesc = $context['module_description'] ?? '';
+        $comparisonPoints = $context['comparison_points'] ?? [];
+
+        $comparisonsText = '';
+        if (!empty($comparisonPoints)) {
+            foreach ($comparisonPoints as $point) {
+                $comparisonsText .= "- {$point['source_concept']} → {$point['target_concept']}\n";
+            }
+        }
+
+        return <<<PROMPT
+Create detailed learning content for this module in a {$sourceSkill} to {$targetSkill} transition course.
+
+**Module:** {$moduleTitle}
+**Description:** {$moduleDesc}
+**Key Comparisons:**
+{$comparisonsText}
+
+Generate comprehensive content with:
+
+1. **Concept Explanation** (200-300 words explaining the concept)
+2. **Code Examples** (2-3 side-by-side {$sourceSkill} vs {$targetSkill} examples)
+3. **Step-by-Step Tutorial** (4-6 practical steps)
+4. **Best Practices** (3-4 key recommendations)
+5. **Common Pitfalls** (2-3 things to avoid)
+6. **Practice Exercise** (1 hands-on coding challenge)
+
+IMPORTANT: Respond ONLY with valid JSON. No markdown, no explanations:
+{
+  "explanation": "Detailed explanation of the concept...",
+  "code_examples": [
+    {
+      "description": "What this example demonstrates",
+      "source_code": "{$sourceSkill} code here",
+      "target_code": "{$targetSkill} equivalent code",
+      "explanation": "Key differences and similarities"
+    }
+  ],
+  "tutorial": [
+    {
+      "step": 1,
+      "title": "Step title",
+      "instructions": "What to do",
+      "code": "Code snippet if needed"
+    }
+  ],
+  "best_practices": ["Practice 1", "Practice 2", "Practice 3"],
+  "common_pitfalls": ["Pitfall 1", "Pitfall 2"],
+  "exercise": {
+    "title": "Exercise title",
+    "description": "What to build or solve",
+    "requirements": ["Requirement 1", "Requirement 2"],
+    "hints": ["Hint 1", "Hint 2"]
+  }
+}
+
+JSON Response:
+PROMPT;
+    }
+
+    /**
+     * 🆕 Parse module content response.
+     */
+    protected function parseModuleContent(string $response): array
+    {
+        // Remove Markdown code blocks if present
+        $response = preg_replace('/```json\n?/', '', $response);
+        $response = preg_replace('/\n?```/', '', $response);
+        $response = trim($response);
+
+        // Clean any leading text before JSON
+        $response = $this->cleanAIJsonResponse($response);
+
+        $data = json_decode($response, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::warning('Initial JSON parse failed for module content', [
+                'error' => json_last_error_msg(),
+            ]);
+
+            $normalizedResponse = $this->normalizeSingleQuotes($response);
+            $data = json_decode($normalizedResponse, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::error('Failed to parse module content as JSON', [
+                    'response_snippet' => substr($response, 0, 500),
+                    'error' => json_last_error_msg(),
+                ]);
+                throw new \Exception('Failed to parse module content: ' . json_last_error_msg());
+            }
+        }
+
+        // Ensure required structure exists
+        return [
+            'explanation' => $data['explanation'] ?? 'Content explanation...',
+            'code_examples' => $data['code_examples'] ?? [],
+            'tutorial' => $data['tutorial'] ?? [],
+            'best_practices' => $data['best_practices'] ?? [],
+            'common_pitfalls' => $data['common_pitfalls'] ?? [],
+            'exercise' => $data['exercise'] ?? null,
+        ];
+    }
+
+    /**
+     * 🆕 Fallback module content when AI unavailable.
+     */
+    protected function getFallbackModuleContent(array $context): array
+    {
+        return [
+            'explanation' => "This module covers {$context['module_title']}. Content will be added by course curators.",
+            'code_examples' => [
+                [
+                    'description' => 'Example code comparison',
+                    'source_code' => '// ' . $context['source_skill'] . ' code example',
+                    'target_code' => '// ' . $context['target_skill'] . ' code example',
+                    'explanation' => 'Code examples will be added by curators',
+                ]
+            ],
+            'tutorial' => [
+                [
+                    'step' => 1,
+                    'title' => 'Getting Started',
+                    'instructions' => 'Tutorial steps will be added by curators',
+                    'code' => null,
+                ]
+            ],
+            'best_practices' => [
+                'Best practices will be added by curators',
+            ],
+            'common_pitfalls' => [
+                'Common pitfalls will be added by curators',
+            ],
+            'exercise' => [
+                'title' => 'Practice Exercise',
+                'description' => 'Exercise details will be added by curators',
+                'requirements' => ['Requirements will be added'],
+                'hints' => ['Hints will be added'],
+            ],
+        ];
     }
 
     /**
@@ -484,7 +659,6 @@ PROMPT;
         return $response;
     }
 
-
     /**
      * Helper: return strpos or a large number if not found (for min comparison)
      */
@@ -493,7 +667,6 @@ PROMPT;
         $pos = strpos($haystack, $needle);
         return $pos === false ? strlen($haystack) : $pos;
     }
-
 
     /**
      * Normalize single quotes to double quotes in JSON-like strings

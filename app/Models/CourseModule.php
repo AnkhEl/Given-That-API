@@ -42,6 +42,7 @@ class CourseModule extends Model
         'comparison_points' => 'array',
         'code_examples' => 'array',
         'resources' => 'array',
+        'content' => 'array',
         'estimated_minutes' => 'integer',
         'order_index' => 'integer',
         'is_published' => 'boolean',

@@ -92,7 +92,21 @@ Route::prefix('v1')->group(function () {
                     Route::post('/{module}/publish', [CourseModuleController::class, 'publish']);
                     Route::post('/{module}/unpublish', [CourseModuleController::class, 'unpublish']);
                     Route::post('/reorder', [CourseModuleController::class, 'reorder']);
+
+                    // Module content generation
+                    Route::post('/{module}/generate-content', [CourseController::class, 'generateModuleContent'])
+                        ->name('courses.modules.generate-content');
+                    Route::post('/{module}/regenerate-content', [CourseController::class, 'regenerateModuleContent'])
+                        ->name('courses.modules.regenerate-content');
+                    Route::get('/{module}/content-status', [CourseController::class, 'checkModuleContentStatus'])
+                        ->name('courses.modules.content-status');
                 });
+
+                // Course-level content generation
+                Route::post('/{course}/generate-all-content', [CourseController::class, 'generateAllModuleContent'])
+                    ->name('courses.generate-all-content');
+                Route::get('/{course}/content-overview', [CourseController::class, 'getContentOverview'])
+                    ->name('courses.content-overview');
             });
 
             // Assessments routes

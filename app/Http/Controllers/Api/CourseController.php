@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Course\StoreCourseRequest;
 use App\Http\Requests\Course\UpdateCourseRequest;
 use App\Http\Resources\CourseResource;
+use App\Jobs\GenerateModuleContent;
 use App\Models\Course;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Models\CourseModule;
 
 class CourseController extends Controller
 {
@@ -225,5 +227,168 @@ class CourseController extends Controller
         ];
 
         return $this->successResponse($stats, 'Course statistics retrieved successfully');
+    }
+
+    /**
+     * 🆕 Generate content for a specific module.
+     * POST /api/v1/courses/{course}/modules/{module}/generate-content
+     */
+    public function generateModuleContent(Course $course, CourseModule $module, Request $request): JsonResponse
+    {
+        // Authorization: Only curators and super admins can generate content
+        if (!$request->user()->hasAnyRole(['curator', 'super_admin'])) {
+            return $this->errorResponse('Unauthorized', 403);
+        }
+
+        // Verify module belongs to course
+        if ($module->course_id !== $course->id) {
+            return $this->errorResponse('Module does not belong to this course', 400);
+        }
+
+        // Check if content already exists
+        if (!empty($module->content)) {
+            return $this->errorResponse(
+                'Module already has content. Delete existing content first to regenerate.',
+                400
+            );
+        }
+
+        // Dispatch job to generate content
+        GenerateModuleContent::dispatch($module);
+
+        return $this->successResponse(
+            [
+                'module_id' => $module->id,
+                'module_title' => $module->title,
+                'status' => 'generating',
+            ],
+            'Content generation started for module'
+        );
+    }
+
+    /**
+     * 🆕 Generate content for ALL modules in a course.
+     * POST /api/v1/courses/{course}/generate-all-content
+     */
+    public function generateAllModuleContent(Course $course, Request $request): JsonResponse
+    {
+        // Authorization
+        if (!$request->user()->hasAnyRole(['curator', 'super_admin'])) {
+            return $this->errorResponse('Unauthorized', 403);
+        }
+
+        // Get modules without content — grouped to avoid leaking other courses
+        $modulesWithoutContent = $course->modules()
+            ->where(function ($query) {
+                $query->whereNull('content')
+                    ->orWhere('content', '');
+            })
+            ->get();
+
+        if ($modulesWithoutContent->isEmpty()) {
+            return $this->errorResponse('All modules already have content', 400);
+        }
+
+        // Dispatch generation jobs for each module
+        $modulesWithoutContent->each(function ($module) {
+            GenerateModuleContent::dispatch($module);
+        });
+
+        return $this->successResponse(
+            [
+                'course_id' => $course->id,
+                'modules_queued' => $modulesWithoutContent->count(),
+                'total_modules' => $course->modules()->count(),
+            ],
+            'Content generation started for ' . $modulesWithoutContent->count() . ' modules'
+        );
+    }
+
+    /**
+     * 🆕 Force regenerate content for a module (deletes existing).
+     * POST /api/v1/courses/{course}/modules/{module}/regenerate-content
+     */
+    public function regenerateModuleContent(Course $course, CourseModule $module, Request $request): JsonResponse
+    {
+        // Authorization
+        if (!$request->user()->hasAnyRole(['curator', 'super_admin'])) {
+            return $this->errorResponse('Unauthorized', 403);
+        }
+
+        // Verify module belongs to course
+        if ($module->course_id !== $course->id) {
+            return $this->errorResponse('Module does not belong to this course', 400);
+        }
+
+        // Clear existing content
+        $module->update(['content' => null]);
+
+        // Dispatch job to generate content
+        GenerateModuleContent::dispatch($module);
+
+        return $this->successResponse(
+            [
+                'module_id' => $module->id,
+                'module_title' => $module->title,
+                'status' => 'regenerating',
+            ],
+            'Content regeneration started for module'
+        );
+    }
+
+    /**
+     * 🆕 Check module content generation status.
+     * GET /api/v1/courses/{course}/modules/{module}/content-status
+     */
+    public function checkModuleContentStatus(Course $course, CourseModule $module): JsonResponse
+    {
+        // Verify module belongs to course
+        if ($module->course_id !== $course->id) {
+            return $this->errorResponse('Module does not belong to this course', 400);
+        }
+
+        $hasContent = !empty($module->content);
+        $content = $hasContent ? $module->content : null;
+
+        return $this->successResponse([
+            'module_id' => $module->id,
+            'module_title' => $module->title,
+            'has_content' => $hasContent,
+            'content_sections' => $hasContent ? array_keys($content ?? []) : [],
+            'code_examples_count' => count($content['code_examples'] ?? []),
+            'tutorial_steps' => count($content['tutorial'] ?? []),
+            'is_ai_generated' => $hasContent && !isset($content['error']),
+        ]);
+    }
+
+    /**
+     * 🆕 Get course content generation overview.
+     * GET /api/v1/courses/{course}/content-overview
+     */
+    public function getContentOverview(Course $course): JsonResponse
+    {
+        $modules = $course->modules;
+        $totalModules = $modules->count();
+        $modulesWithContent = $modules->filter(fn($m) => !empty($m->content))->count();
+
+        return $this->successResponse([
+            'course_id' => $course->id,
+            'course_title' => $course->title,
+            'total_modules' => $totalModules,
+            'modules_with_content' => $modulesWithContent,
+            'modules_without_content' => $totalModules - $modulesWithContent,
+            'completion_percentage' => $totalModules > 0
+                ? round(($modulesWithContent / $totalModules) * 100, 2)
+                : 0,
+            'modules' => $modules->map(fn($module) => [
+                'id' => $module->id,
+                'title' => $module->title,
+                'order_index' => $module->order_index,
+                'has_content' => !empty($module->content),
+                'content_preview' => !empty($module->content)
+                    ? substr($module->content['explanation'] ?? '', 0, 100) . '...'
+                    : null,
+            ]),
+        ]);
     }
 }
